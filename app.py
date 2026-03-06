@@ -17,9 +17,10 @@ AWS_REGION="ap-south-1"
 
 # Initialize AWS services
 dynamodb = boto3.resource(
-    "dynamodb",
-    region_name=AWS_REGION
-)
+    "dynamodb", 
+    AWS_ACCESS_KEY_ID = "AKIASO3GJLM4QNK5T7VK"
+AWS_SECRET_ACCESS_KEY = "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"
+AWS_REGION="ap-south-1")
 
 s3 = boto3.client(
     "s3",
@@ -122,4 +123,5 @@ st.divider()
 
 
 st.caption("Velir AI – AI for Bharat Hackathon Prototype")
+
 
