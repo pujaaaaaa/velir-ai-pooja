@@ -11,9 +11,9 @@ AWS_REGION = "ap-south-1"
 S3_BUCKET = "velir-ai-pooja-2026"
 DYNAMO_TABLE = "velir_queries"
 
-AWS_ACCESS_KEY = st.secrets["AWS_ACCESS_KEY_ID"]
-AWS_SECRET_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
-AWS_REGION = st.secrets["AWS_REGION"]
+AWS_ACCESS_KEY_ID = "AKIASO3GJLM4QNK5T7VK"
+AWS_SECRET_ACCESS_KEY = "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"
+AWS_REGION="ap-south-1"
 
 # Initialize AWS services
 dynamodb = boto3.resource(
@@ -122,3 +122,4 @@ st.divider()
 
 
 st.caption("Velir AI – AI for Bharat Hackathon Prototype")
+
