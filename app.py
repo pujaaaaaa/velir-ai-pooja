@@ -4,7 +4,7 @@ import datetime
 from PIL import Image
 
 # ---------------------------
-# STREAMLIT CONFIG
+# PAGE CONFIG
 # ---------------------------
 
 st.set_page_config(
@@ -57,22 +57,40 @@ st.sidebar.metric("Sugarcane", "₹315 / ton", "+0.5%")
 st.sidebar.divider()
 
 st.sidebar.subheader("🌦 Weather Status")
-
 st.sidebar.write("Location: Tamil Nadu")
 st.sidebar.write("Condition: 🌤 Partly Cloudy")
-st.sidebar.write("Rainfall: Expected in 3 days")
+st.sidebar.write("Temperature: 31°C")
 
 st.sidebar.divider()
 
-st.sidebar.subheader("🟢 System Status")
+st.sidebar.subheader("🚨 Farmer Alerts")
+
+st.sidebar.warning("Heavy rainfall expected in next 48 hours")
+st.sidebar.info("Delay fertilizer spraying due to expected rain")
+st.sidebar.error("Cyclone risk advisory for coastal farmers")
+
+st.sidebar.divider()
+
 st.sidebar.success("AI Services Online")
 
 # ---------------------------
-# MAIN PAGE
+# MAIN PAGE HEADER
 # ---------------------------
 
 st.title("🌾 Velir AI")
 st.subheader("Digital Farmer Officer")
+
+# ---------------------------
+# TOP WEATHER ALERT
+# ---------------------------
+
+st.warning(
+    "⚠ WEATHER ALERT: Heavy rainfall expected in Tamil Nadu within 48 hours. Ensure proper drainage in fields."
+)
+
+# ---------------------------
+# AI MODULE CARDS
+# ---------------------------
 
 col1, col2 = st.columns(2)
 
@@ -85,82 +103,100 @@ with col2:
 st.divider()
 
 # ---------------------------
-# QUERY INPUT SECTION
+# SMART ADVISORY
 # ---------------------------
 
-st.header("💬 Ask about Insurance / Weather / Crops")
+st.subheader("🌾 Smart Advisory")
 
-with st.container():
+col1, col2, col3 = st.columns(3)
 
-    query = st.text_input(
-        "Enter your query",
-        placeholder="Example: Will rain affect my crop insurance?"
-    )
+with col1:
+    st.success("🌱 Soil moisture levels are optimal")
 
-    if st.button("🔍 Analyze Query"):
+with col2:
+    st.warning("🌧 Rain expected — delay pesticide spray")
 
-        if query == "":
-            st.warning("Please enter a question")
-
-        else:
-
-            if "crop" in query.lower():
-                response = "Your crop condition appears stable. Monitor rainfall and pests."
-
-            elif "insurance" in query.lower():
-                response = "You are covered under the Prevented Sowing clause."
-
-            elif "weather" in query.lower():
-                response = "Rainfall is expected within the next 3 days."
-
-            else:
-                response = "Our system will analyze your request."
-
-            st.success(response)
-
-            table.put_item(
-                Item={
-                    "query_id": str(datetime.datetime.now()),
-                    "query": query,
-                    "response": response,
-                    "timestamp": str(datetime.datetime.now())
-                }
-            )
-
-            st.info("Query stored in database")
+with col3:
+    st.info("🐛 Monitor crops for pest activity")
 
 st.divider()
 
 # ---------------------------
-# IMAGE UPLOAD SECTION
+# QUERY INPUT
+# ---------------------------
+
+st.header("💬 Ask about Insurance / Weather / Crops")
+
+query = st.text_input(
+    "Enter your question",
+    placeholder="Example: Will rain affect my crop insurance?"
+)
+
+if st.button("🔍 Analyze Query"):
+
+    if query == "":
+        st.warning("Please enter a question")
+
+    else:
+
+        if "crop" in query.lower():
+            response = "Your crop condition appears stable. Monitor rainfall and pests."
+
+        elif "insurance" in query.lower():
+            response = "You are covered under the Prevented Sowing clause."
+
+        elif "weather" in query.lower():
+            response = "Rainfall is expected within the next 3 days."
+
+        elif "pest" in query.lower():
+            response = "Inspect crop leaves for pest damage and consider early pesticide application."
+
+        else:
+            response = "Our system will analyze your request and provide guidance."
+
+        st.success(response)
+
+        table.put_item(
+            Item={
+                "query_id": str(datetime.datetime.now()),
+                "query": query,
+                "response": response,
+                "timestamp": str(datetime.datetime.now())
+            }
+        )
+
+        st.info("Query stored in database")
+
+st.divider()
+
+# ---------------------------
+# IMAGE UPLOAD
 # ---------------------------
 
 st.header("📷 Crop Image Analyzer")
 
-with st.container():
+uploaded_file = st.file_uploader(
+    "Upload crop photo",
+    type=["jpg", "jpeg", "png"]
+)
 
-    uploaded_file = st.file_uploader(
-        "Upload crop photo",
-        type=["jpg","jpeg","png"]
+if uploaded_file:
+
+    image = Image.open(uploaded_file)
+
+    st.image(image, caption="Uploaded Crop Image", use_container_width=True)
+
+    file_name = uploaded_file.name
+
+    s3.upload_fileobj(
+        uploaded_file,
+        S3_BUCKET,
+        file_name
     )
 
-    if uploaded_file:
+    st.success("Image uploaded successfully")
 
-        image = Image.open(uploaded_file)
-
-        st.image(image, caption="Uploaded Crop Image", use_container_width=True)
-
-        file_name = uploaded_file.name
-
-        s3.upload_fileobj(
-            uploaded_file,
-            S3_BUCKET,
-            file_name
-        )
-
-        st.success("Image uploaded to S3")
-
-        st.info("AI crop disease detection will be added in next version.")
+    st.info("AI crop disease detection will be added in the next version.")
 
 st.divider()
 
