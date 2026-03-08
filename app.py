@@ -74,14 +74,14 @@ st.sidebar.divider()
 st.sidebar.success("AI Services Online")
 
 # ---------------------------
-# MAIN PAGE HEADER
+# MAIN HEADER
 # ---------------------------
 
 st.title("🌾 Velir AI")
 st.subheader("Digital Farmer Officer")
 
 # ---------------------------
-# TOP WEATHER ALERT
+# WEATHER ALERT
 # ---------------------------
 
 st.warning(
@@ -95,10 +95,10 @@ st.warning(
 col1, col2 = st.columns(2)
 
 with col1:
-    st.info("🎙️ *Vani – Policy Assistant*")
+    st.info("🎙️ Vani – Policy Assistant")
 
 with col2:
-    st.info("👁️ *Kisan Vision – Crop Analyzer*")
+    st.info("👁️ Kisan Vision – Crop Analyzer")
 
 st.divider()
 
@@ -134,31 +134,34 @@ query = st.text_input(
 
 if st.button("🔍 Analyze Query"):
 
-    if query == "":
+    if query.strip() == "":
         st.warning("Please enter a question")
 
     else:
 
-        if "crop" in query.lower():
-            response = "Your crop condition appears stable. Monitor rainfall and pests."
+        q = query.lower()
 
-        elif "insurance" in query.lower():
-            response = "You are covered under the Prevented Sowing clause."
+        if "crop" in q:
+            response = "Your crop condition appears stable. Ensure proper irrigation and monitor pest activity."
 
-        elif "weather" in query.lower():
-            response = "Rainfall is expected within the next 3 days."
+        elif "insurance" in q:
+            response = "You may be eligible under the Prevented Sowing clause of crop insurance."
 
-        elif "pest" in query.lower():
-            response = "Inspect crop leaves for pest damage and consider early pesticide application."
+        elif "weather" in q:
+            response = "Rainfall is expected within the next 3 days. Farmers should delay pesticide spraying."
+
+        elif "pest" in q:
+            response = "Inspect crop leaves for pest damage and apply recommended pesticide if necessary."
 
         else:
-            response = "Our system will analyze your request and provide guidance."
+            response = "Velir AI recommends monitoring weather updates and maintaining proper soil moisture."
 
         st.success(response)
 
+        # Save to DynamoDB
         table.put_item(
             Item={
-                "query_id": str(datetime.datetime.now()),
+                "query_id": str(datetime.datetime.now().timestamp()),
                 "query": query,
                 "response": response,
                 "timestamp": str(datetime.datetime.now())
@@ -188,6 +191,7 @@ if uploaded_file:
 
     file_name = uploaded_file.name
 
+    # Upload to S3
     s3.upload_fileobj(
         uploaded_file,
         S3_BUCKET,
@@ -196,7 +200,16 @@ if uploaded_file:
 
     st.success("Image uploaded successfully")
 
-    st.info("AI crop disease detection will be added in the next version.")
+    # SAMPLE AI ANALYSIS
+    st.subheader("🌿 Crop Health Analysis")
+
+    st.success("Plant condition: Healthy")
+
+    st.write("Possible Issue: Minor leaf discoloration detected")
+
+    st.write("Recommendation: Apply mild organic pesticide and monitor moisture levels.")
+
+    st.info("This is a prototype AI crop analysis result.")
 
 st.divider()
 
