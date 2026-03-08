@@ -2,6 +2,6 @@ streamlit
 boto3
 pandas
 numpy
-openai
 pyngrok
-pillow
+
+
