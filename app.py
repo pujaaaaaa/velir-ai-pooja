@@ -1,10 +1,13 @@
 import streamlit as st
 import boto3
 import datetime
+import json
+import base64
 from PIL import Image
+from io import BytesIO
 
 # ---------------------------
-# PAGE CONFIG
+# STREAMLIT CONFIG
 # ---------------------------
 
 st.set_page_config(
@@ -14,15 +17,19 @@ st.set_page_config(
 )
 
 # ---------------------------
-# AWS CONFIGURATION
+# AWS CONFIG
 # ---------------------------
-
-S3_BUCKET = "velir-ai-pooja-2026"
-DYNAMO_TABLE = "velir_queries"
 
 AWS_ACCESS_KEY_ID = st.secrets["AWS_ACCESS_KEY_ID"]
 AWS_SECRET_ACCESS_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
 AWS_REGION = st.secrets["AWS_REGION"]
+
+S3_BUCKET = "velir-ai-pooja-2026"
+DYNAMO_TABLE = "velir_queries"
+
+# ---------------------------
+# AWS CLIENTS
+# ---------------------------
 
 dynamodb = boto3.resource(
     "dynamodb",
@@ -38,170 +45,226 @@ s3 = boto3.client(
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY
 )
 
+bedrock = boto3.client(
+    "bedrock-runtime",
+    region_name=AWS_REGION,
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+)
+
 table = dynamodb.Table(DYNAMO_TABLE)
 
 # ---------------------------
-# SIDEBAR DASHBOARD
+# SIDEBAR
 # ---------------------------
 
-st.sidebar.title("🌾 Velir AI Dashboard")
+st.sidebar.title("📈 Crop Market Prices")
 
-st.sidebar.subheader("📈 Crop Market Prices")
+crop_prices = {
+    "Rice": 2450,
+    "Wheat": 2125,
+    "Maize": 1980,
+    "Sugarcane": 315,
+    "Cotton": 6450
+}
 
-st.sidebar.metric("Rice", "₹2450 / quintal", "+2.1%")
-st.sidebar.metric("Wheat", "₹2120 / quintal", "+1.3%")
-st.sidebar.metric("Maize", "₹1980 / quintal", "-0.8%")
-st.sidebar.metric("Cotton", "₹6450 / quintal", "+3.4%")
-st.sidebar.metric("Sugarcane", "₹315 / ton", "+0.5%")
+for crop, price in crop_prices.items():
+    st.sidebar.metric(crop, f"₹{price}", "Market")
 
-st.sidebar.divider()
-
-st.sidebar.subheader("🌦 Weather Status")
-st.sidebar.write("Location: Tamil Nadu")
-st.sidebar.write("Condition: 🌤 Partly Cloudy")
-st.sidebar.write("Temperature: 31°C")
-
-st.sidebar.divider()
-
-st.sidebar.subheader("🚨 Farmer Alerts")
-
-st.sidebar.warning("Heavy rainfall expected in next 48 hours")
-st.sidebar.info("Delay fertilizer spraying due to expected rain")
-st.sidebar.error("Cyclone risk advisory for coastal farmers")
-
-st.sidebar.divider()
-
-st.sidebar.success("AI Services Online")
+st.sidebar.caption("Sample mandi price data")
 
 # ---------------------------
-# MAIN PAGE HEADER
+# MAIN PAGE
 # ---------------------------
 
 st.title("🌾 Velir AI")
 st.subheader("Digital Farmer Officer")
 
-# ---------------------------
-# TOP WEATHER ALERT
-# ---------------------------
-
-st.warning(
-    "⚠ WEATHER ALERT: Heavy rainfall expected in Tamil Nadu within 48 hours. Ensure proper drainage in fields."
-)
-
-# ---------------------------
-# AI MODULE CARDS
-# ---------------------------
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.info("🎙️ **Vani – Policy Assistant**")
-
-with col2:
-    st.info("👁️ **Kisan Vision – Crop Analyzer**")
+st.write("🎙️ *Vani – Policy Assistant*")
+st.write("👁️ *Kisan Vision – Crop Analyzer*")
 
 st.divider()
 
 # ---------------------------
-# SMART ADVISORY
+# FARMER QUESTION
 # ---------------------------
 
-st.subheader("🌾 Smart Advisory")
+st.header("Ask about Farming / Weather / Insurance")
 
-col1, col2, col3 = st.columns(3)
+query = st.text_input("Enter your question")
 
-with col1:
-    st.success("🌱 Soil moisture levels are optimal")
+if st.button("Submit Query"):
 
-with col2:
-    st.warning("🌧 Rain expected — delay pesticide spray")
-
-with col3:
-    st.info("🐛 Monitor crops for pest activity")
-
-st.divider()
-
-# ---------------------------
-# QUERY INPUT
-# ---------------------------
-
-st.header("💬 Ask about Insurance / Weather / Crops")
-
-query = st.text_input(
-    "Enter your question",
-    placeholder="Example: Will rain affect my crop insurance?"
-)
-
-if st.button("🔍 Analyze Query"):
-
-    if query == "":
+    if query.strip() == "":
         st.warning("Please enter a question")
 
     else:
 
-        if "crop" in query.lower():
-            response = "Your crop condition appears stable. Monitor rainfall and pests."
+        prompt = f"""
+You are an agricultural expert helping Indian farmers.
 
-        elif "insurance" in query.lower():
-            response = "You are covered under the Prevented Sowing clause."
+Answer simply and clearly.
 
-        elif "weather" in query.lower():
-            response = "Rainfall is expected within the next 3 days."
+Question:
+{query}
+"""
 
-        elif "pest" in query.lower():
-            response = "Inspect crop leaves for pest damage and consider early pesticide application."
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 300,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                }
+            ]
+        })
 
-        else:
-            response = "Our system will analyze your request and provide guidance."
+        try:
 
-        st.success(response)
+            response = bedrock.invoke_model(
+                modelId="anthropic.claude-3-haiku-20240307-v1:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json"
+            )
 
-        table.put_item(
-            Item={
-                "query_id": str(datetime.datetime.now()),
-                "query": query,
-                "response": response,
-                "timestamp": str(datetime.datetime.now())
-            }
-        )
+            result = json.loads(response["body"].read())
+            answer = result["content"][0]["text"]
 
-        st.info("Query stored in database")
+        except Exception as e:
+
+            st.error(e)
+            answer = "AI service unavailable."
+
+        st.success(answer)
+
+        # Save query
+        try:
+
+            table.put_item(
+                Item={
+                    "query_id": str(datetime.datetime.now().timestamp()),
+                    "query": query,
+                    "response": answer,
+                    "timestamp": str(datetime.datetime.now())
+                }
+            )
+
+        except Exception as e:
+            st.warning("Database save failed")
 
 st.divider()
 
 # ---------------------------
-# IMAGE UPLOAD
+# IMAGE ANALYSIS
 # ---------------------------
 
-st.header("📷 Crop Image Analyzer")
+st.header("Upload Crop Image for Disease Detection")
 
 uploaded_file = st.file_uploader(
-    "Upload crop photo",
-    type=["jpg", "jpeg", "png"]
+    "Upload crop image",
+    type=["jpg","jpeg","png"]
 )
 
 if uploaded_file:
 
     image = Image.open(uploaded_file)
-
     st.image(image, caption="Uploaded Crop Image", use_container_width=True)
 
     file_name = uploaded_file.name
 
-    s3.upload_fileobj(
-        uploaded_file,
-        S3_BUCKET,
-        file_name
-    )
+    # Reset file pointer
+    uploaded_file.seek(0)
 
-    st.success("Image uploaded successfully")
+    try:
 
-    st.info("AI crop disease detection will be added in the next version.")
+        s3.upload_fileobj(uploaded_file, S3_BUCKET, file_name)
+        st.success("Image uploaded to S3")
+
+    except Exception as e:
+
+        st.error("S3 upload failed")
+        st.stop()
+
+    # Convert image
+    buffered = BytesIO()
+    image.save(buffered, format="JPEG")
+
+    img_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+    st.info("Analyzing crop health with AI...")
+
+    prompt = """
+Analyze this crop image.
+
+Identify possible plant diseases.
+
+Provide:
+1. Disease name
+2. Cause
+3. Treatment
+4. Prevention tips
+
+Explain clearly for farmers.
+"""
+
+    body = json.dumps({
+
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 400,
+
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": img_base64
+                        }
+                    },
+
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+
+                ]
+            }
+        ]
+    })
+
+    try:
+
+        response = bedrock.invoke_model(
+            modelId="anthropic.claude-3-haiku-20240307-v1:0",
+            body=body,
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        result = json.loads(response["body"].read())
+
+        diagnosis = result["content"][0]["text"]
+
+        st.success("🌿 Crop Analysis Result")
+
+        st.write(diagnosis)
+
+    except Exception as e:
+
+        st.error("AI crop analysis failed")
+        st.error(e)
 
 st.divider()
-
-# ---------------------------
-# FOOTER
-# ---------------------------
 
 st.caption("Velir AI – AI for Bharat Hackathon Prototype")
