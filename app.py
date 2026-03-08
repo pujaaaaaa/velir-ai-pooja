@@ -110,19 +110,23 @@ if st.button("Submit Query"):
                         "role": "user",
                         "content": query
                     }
-                ]
+                ],
+                max_tokens=200
             )
 
             answer = response.choices[0].message.content
 
         except Exception as e:
 
-            st.error("AI service error")
+            st.error(f"AI service error: {e}")
             answer = "Please monitor crop conditions and weather updates regularly."
 
         st.success(answer)
 
-        # Save query in DynamoDB
+        # ---------------------------
+        # SAVE QUERY TO DYNAMODB
+        # ---------------------------
+
         try:
 
             table.put_item(
@@ -134,8 +138,9 @@ if st.button("Submit Query"):
                 }
             )
 
-        except Exception:
-            st.warning("Database save failed")
+        except Exception as db_error:
+
+            st.warning(f"Database save failed: {db_error}")
 
 st.divider()
 
@@ -168,9 +173,9 @@ if uploaded_file:
 
         st.success("Image uploaded to S3")
 
-    except Exception:
+    except Exception as s3_error:
 
-        st.error("S3 upload failed")
+        st.error(f"S3 upload failed: {s3_error}")
 
     st.info("AI crop disease detection will be added in next version.")
 
