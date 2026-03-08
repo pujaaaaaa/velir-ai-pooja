@@ -243,9 +243,12 @@ Explain simply for farmers.
     try:
 
         response = bedrock.invoke_model(
-            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
-            body=body
-        )
+    modelId="anthropic.claude-3-haiku-20240307-v1:0",
+    body=body,
+    contentType="application/json",
+    accept="application/json"
+)
+        
 
         result = json.loads(response["body"].read())
 
@@ -262,3 +265,4 @@ Explain simply for farmers.
 st.divider()
 
 st.caption("Velir AI – AI for Bharat Hackathon Prototype")
+
