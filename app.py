@@ -1,46 +1,175 @@
 import streamlit as st
 import boto3
+import datetime
 import json
+import base64
 from PIL import Image
-import uuid
-import os
+from io import BytesIO
 
-# -----------------------------
+# ---------------------------
+# STREAMLIT PAGE CONFIG
+# ---------------------------
+
+st.set_page_config(
+    page_title="Velir AI",
+    page_icon="🌾",
+    layout="wide"
+)
+
+# ---------------------------
 # AWS CONFIG
-# -----------------------------
+# ---------------------------
 
-AWS_REGION = "ap-south-1"
-S3_BUCKET = "velir-ai-pooja-images"
-TABLE_NAME = "velir-ai-pooja-queries"
+AWS_ACCESS_KEY_ID = st.secrets["AWS_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
+AWS_REGION = st.secrets["AWS_REGION"]
 
-# AWS clients
-s3 = boto3.client("s3", region_name=AWS_REGION)
+S3_BUCKET = "velir-ai-pooja-2026"
+DYNAMO_TABLE = "velir_queries"
 
-dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
-table = dynamodb.Table(TABLE_NAME)
+# ---------------------------
+# AWS CLIENTS
+# ---------------------------
+
+dynamodb = boto3.resource(
+    "dynamodb",
+    region_name=AWS_REGION,
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+)
+
+s3 = boto3.client(
+    "s3",
+    region_name=AWS_REGION,
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+)
 
 bedrock = boto3.client(
     "bedrock-runtime",
-    region_name=AWS_REGION
+    region_name=AWS_REGION,
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
 )
 
-# -----------------------------
-# STREAMLIT UI
-# -----------------------------
+table = dynamodb.Table(DYNAMO_TABLE)
 
-st.title("🌾 Velir AI - Smart Farming Assistant")
+# ---------------------------
+# SIDEBAR - CROP PRICES
+# ---------------------------
 
-st.write("Upload crop image or ask farming questions")
+st.sidebar.title("📈 Crop Market Prices")
 
-# -----------------------------
-# IMAGE UPLOAD SECTION
-# -----------------------------
+crop_prices = {
+    "Rice": 2450,
+    "Wheat": 2125,
+    "Maize": 1980,
+    "Sugarcane": 315,
+    "Cotton": 6450
+}
 
-st.header("📸 Crop Disease Detection")
+for crop, price in crop_prices.items():
+
+    st.sidebar.metric(
+        label=crop,
+        value=f"₹{price}",
+        delta="Market"
+    )
+
+st.sidebar.caption("Sample mandi price data")
+
+# ---------------------------
+# MAIN TITLE
+# ---------------------------
+
+st.title("🌾 Velir AI")
+st.subheader("Digital Farmer Officer")
+
+st.write("🎙️ *Vani – Policy Assistant*")
+st.write("👁️ *Kisan Vision – Crop Analyzer*")
+
+st.divider()
+
+# ---------------------------
+# QUERY INPUT
+# ---------------------------
+
+st.header("Ask about Insurance / Weather")
+
+query = st.text_input(
+    "Enter your question",
+    placeholder="Example: how is my crop?"
+)
+
+if st.button("Submit Query"):
+
+    if query.strip() == "":
+        st.warning("Please enter a question")
+
+    else:
+
+        prompt = f"""
+You are an agricultural expert helping Indian farmers.
+
+Answer clearly and simply.
+
+Question:
+{query}
+"""
+
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 300,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        })
+
+        try:
+
+            response = bedrock.invoke_model(
+                modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                body=body
+            )
+
+            result = json.loads(response["body"].read())
+
+            answer = result["content"][0]["text"]
+
+        except Exception as e:
+
+            answer = "AI service temporarily unavailable."
+
+        st.success(answer)
+
+        try:
+
+            table.put_item(
+                Item={
+                    "query_id": str(datetime.datetime.now().timestamp()),
+                    "query": query,
+                    "response": answer,
+                    "timestamp": str(datetime.datetime.now())
+                }
+            )
+
+        except:
+            st.warning("Database storage failed")
+
+st.divider()
+
+# ---------------------------
+# IMAGE UPLOAD
+# ---------------------------
+
+st.header("Upload Crop Image for Disease Detection")
 
 uploaded_file = st.file_uploader(
-    "Upload crop leaf image",
-    type=["jpg", "jpeg", "png"]
+    "Upload crop photo",
+    type=["jpg","jpeg","png"]
 )
 
 if uploaded_file:
@@ -49,93 +178,87 @@ if uploaded_file:
 
     st.image(image, caption="Uploaded Crop Image", use_container_width=True)
 
-    file_name = str(uuid.uuid4()) + "_" + uploaded_file.name
+    file_name = uploaded_file.name
 
-    # Upload to S3
-    s3.upload_fileobj(
-        uploaded_file,
-        S3_BUCKET,
-        file_name
-    )
+    # Upload image to S3
+    try:
 
-    st.success("Image uploaded to S3")
+        s3.upload_fileobj(
+            uploaded_file,
+            S3_BUCKET,
+            file_name
+        )
 
-    # Ask Bedrock
+        st.success("Image uploaded to S3")
+
+    except Exception as e:
+
+        st.error("S3 upload failed")
+        st.stop()
+
+    # Convert image to base64
+    buffered = BytesIO()
+    image.save(buffered, format="JPEG")
+
+    img_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+    st.info("Analyzing crop health with AI...")
+
     prompt = """
-    A farmer uploaded an image of a crop leaf.
+Analyze this crop image and detect possible plant diseases.
 
-    Predict possible crop disease.
+Provide:
+1. Disease name
+2. Cause
+3. Treatment
+4. Prevention tips
 
-    Provide:
-    1. Disease name
-    2. Cause
-    3. Treatment
-    4. Prevention
-
-    Explain simply for farmers.
-    """
+Explain simply for farmers.
+"""
 
     body = json.dumps({
-        "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
-        "max_tokens_to_sample": 300,
-        "temperature": 0.5
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": 400,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": img_base64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            }
+        ]
     })
 
-    response = bedrock.invoke_model(
-        modelId="anthropic.claude-v2",
-        body=body
-    )
-
-    result = json.loads(response["body"].read())
-
-    diagnosis = result["completion"]
-
-    st.subheader("🌿 AI Diagnosis")
-
-    st.write(diagnosis)
-
-# -----------------------------
-# FARMER QUESTION SECTION
-# -----------------------------
-
-st.header("💬 Ask Farming Question")
-
-question = st.text_input("Enter your question")
-
-if st.button("Ask AI"):
-
-    if question != "":
-
-        prompt = f"""
-        You are an agricultural expert.
-
-        Answer the farmer question clearly.
-
-        Question: {question}
-        """
-
-        body = json.dumps({
-            "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
-            "max_tokens_to_sample": 200,
-            "temperature": 0.5
-        })
+    try:
 
         response = bedrock.invoke_model(
-            modelId="anthropic.claude-v2",
+            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
             body=body
         )
 
         result = json.loads(response["body"].read())
 
-        answer = result["completion"]
+        diagnosis = result["content"][0]["text"]
 
-        st.success(answer)
+        st.success("🌿 Crop Analysis")
 
-        # Save to DynamoDB
-        table.put_item(
-            Item={
-                "query_id": str(uuid.uuid4()),
-                "question": question,
-                "answer": answer
-            }
-        )
+        st.write(diagnosis)
+
+    except Exception as e:
+
+        st.error("AI crop analysis failed")
+
+st.divider()
+
+st.caption("Velir AI – AI for Bharat Hackathon Prototype")
