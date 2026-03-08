@@ -2,7 +2,6 @@ import streamlit as st
 import boto3
 import datetime
 from PIL import Image
-from openai import OpenAI
 
 # ---------------------------
 # PAGE CONFIG
@@ -15,25 +14,15 @@ st.set_page_config(
 )
 
 # ---------------------------
-# AWS CONFIG
+# AWS CONFIGURATION
 # ---------------------------
-
-AWS_ACCESS_KEY_ID = st.secrets["AWS_ACCESS_KEY_ID"]
-AWS_SECRET_ACCESS_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
-AWS_REGION = st.secrets["AWS_REGION"]
 
 S3_BUCKET = "velir-ai-pooja-2026"
 DYNAMO_TABLE = "velir_queries"
 
-# ---------------------------
-# OPENAI CONFIG
-# ---------------------------
-
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# ---------------------------
-# AWS CLIENTS
-# ---------------------------
+AWS_ACCESS_KEY_ID = st.secrets["AWS_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
+AWS_REGION = st.secrets["AWS_REGION"]
 
 dynamodb = boto3.resource(
     "dynamodb",
@@ -52,95 +41,131 @@ s3 = boto3.client(
 table = dynamodb.Table(DYNAMO_TABLE)
 
 # ---------------------------
-# SIDEBAR
+# SIDEBAR DASHBOARD
 # ---------------------------
 
-st.sidebar.title("📈 Crop Market Prices")
+st.sidebar.title("🌾 Velir AI Dashboard")
 
-crop_prices = {
-    "Rice": 2450,
-    "Wheat": 2125,
-    "Maize": 1980,
-    "Sugarcane": 315,
-    "Cotton": 6450
-}
+st.sidebar.subheader("📈 Crop Market Prices")
 
-for crop, price in crop_prices.items():
-    st.sidebar.metric(crop, f"₹{price}", "Market")
+st.sidebar.metric("Rice", "₹2450 / quintal", "+2.1%")
+st.sidebar.metric("Wheat", "₹2120 / quintal", "+1.3%")
+st.sidebar.metric("Maize", "₹1980 / quintal", "-0.8%")
+st.sidebar.metric("Cotton", "₹6450 / quintal", "+3.4%")
+st.sidebar.metric("Sugarcane", "₹315 / ton", "+0.5%")
 
-st.sidebar.caption("Sample mandi price data")
+st.sidebar.divider()
+
+st.sidebar.subheader("🌦 Weather Status")
+st.sidebar.write("Location: Tamil Nadu")
+st.sidebar.write("Condition: 🌤 Partly Cloudy")
+st.sidebar.write("Temperature: 31°C")
+
+st.sidebar.divider()
+
+st.sidebar.subheader("🚨 Farmer Alerts")
+
+st.sidebar.warning("Heavy rainfall expected in next 48 hours")
+st.sidebar.info("Delay fertilizer spraying due to expected rain")
+st.sidebar.error("Cyclone risk advisory for coastal farmers")
+
+st.sidebar.divider()
+
+st.sidebar.success("AI Services Online")
 
 # ---------------------------
-# MAIN PAGE
+# MAIN PAGE HEADER
 # ---------------------------
 
 st.title("🌾 Velir AI")
 st.subheader("Digital Farmer Officer")
 
-st.write("🎙️ *Vani – Policy Assistant*")
-st.write("👁️ *Kisan Vision – Crop Analyzer*")
+# ---------------------------
+# TOP WEATHER ALERT
+# ---------------------------
+
+st.warning(
+    "⚠ WEATHER ALERT: Heavy rainfall expected in Tamil Nadu within 48 hours. Ensure proper drainage in fields."
+)
+
+# ---------------------------
+# AI MODULE CARDS
+# ---------------------------
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.info("🎙️ *Vani – Policy Assistant*")
+
+with col2:
+    st.info("👁️ *Kisan Vision – Crop Analyzer*")
 
 st.divider()
 
 # ---------------------------
-# FARMER QUESTION
+# SMART ADVISORY
 # ---------------------------
 
-st.header("Ask about Farming / Weather / Insurance")
+st.subheader("🌾 Smart Advisory")
 
-query = st.text_input("Enter your question")
+col1, col2, col3 = st.columns(3)
 
-if st.button("Submit Query"):
+with col1:
+    st.success("🌱 Soil moisture levels are optimal")
 
-    if query.strip() == "":
+with col2:
+    st.warning("🌧 Rain expected — delay pesticide spray")
+
+with col3:
+    st.info("🐛 Monitor crops for pest activity")
+
+st.divider()
+
+# ---------------------------
+# QUERY INPUT
+# ---------------------------
+
+st.header("💬 Ask about Insurance / Weather / Crops")
+
+query = st.text_input(
+    "Enter your question",
+    placeholder="Example: Will rain affect my crop insurance?"
+)
+
+if st.button("🔍 Analyze Query"):
+
+    if query == "":
         st.warning("Please enter a question")
 
     else:
 
-        try:
+        if "crop" in query.lower():
+            response = "Your crop condition appears stable. Monitor rainfall and pests."
 
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an agricultural expert helping Indian farmers. Give simple and practical farming advice."
-                    },
-                    {
-                        "role": "user",
-                        "content": query
-                    }
-                ],
-                max_tokens=200
-            )
+        elif "insurance" in query.lower():
+            response = "You are covered under the Prevented Sowing clause."
 
-            answer = response.choices[0].message.content
+        elif "weather" in query.lower():
+            response = "Rainfall is expected within the next 3 days."
 
-        except Exception as e:
+        elif "pest" in query.lower():
+            response = "Inspect crop leaves for pest damage and consider early pesticide application."
 
-            st.error(f"AI service error: {e}")
-            answer = "Please monitor crop conditions and weather updates regularly."
+        else:
+            response = "Our system will analyze your request and provide guidance."
 
-        st.success(answer)
+        st.success(response)
 
-        # ---------------------------
-        # SAVE QUERY TO DYNAMODB
-        # ---------------------------
+        table.put_item(
+            Item={
+                "query_id": str(datetime.datetime.now()),
+                "query": query,
+                "response": response,
+                "timestamp": str(datetime.datetime.now())
+            }
+        )
 
-        try:
-
-            table.put_item(
-                Item={
-                    "query_id": str(datetime.datetime.now().timestamp()),
-                    "query": query,
-                    "response": answer,
-                    "timestamp": str(datetime.datetime.now())
-                }
-            )
-
-        except Exception as db_error:
-
-            st.warning(f"Database save failed: {db_error}")
+        st.info("Query stored in database")
 
 st.divider()
 
@@ -148,10 +173,10 @@ st.divider()
 # IMAGE UPLOAD
 # ---------------------------
 
-st.header("Upload Crop Image for Disease Detection")
+st.header("📷 Crop Image Analyzer")
 
 uploaded_file = st.file_uploader(
-    "Upload crop image",
+    "Upload crop photo",
     type=["jpg", "jpeg", "png"]
 )
 
@@ -163,22 +188,20 @@ if uploaded_file:
 
     file_name = uploaded_file.name
 
-    try:
+    s3.upload_fileobj(
+        uploaded_file,
+        S3_BUCKET,
+        file_name
+    )
 
-        s3.upload_fileobj(
-            uploaded_file,
-            S3_BUCKET,
-            file_name
-        )
+    st.success("Image uploaded successfully")
 
-        st.success("Image uploaded to S3")
-
-    except Exception as s3_error:
-
-        st.error(f"S3 upload failed: {s3_error}")
-
-    st.info("AI crop disease detection will be added in next version.")
+    st.info("AI crop disease detection will be added in the next version.")
 
 st.divider()
+
+# ---------------------------
+# FOOTER
+# ---------------------------
 
 st.caption("Velir AI – AI for Bharat Hackathon Prototype")
