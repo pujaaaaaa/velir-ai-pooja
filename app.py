@@ -1,109 +1,83 @@
 import streamlit as st
 import boto3
-import datetime
-from PIL import Image
 import json
+from PIL import Image
+import uuid
+import os
 
-# ---------------------------
-# AWS CONFIGURATION
-# ---------------------------
+# -----------------------------
+# AWS CONFIG
+# -----------------------------
 
-AWS_REGION = st.secrets["AWS_REGION"]
-AWS_ACCESS_KEY_ID = st.secrets["AWS_ACCESS_KEY_ID"]
-AWS_SECRET_ACCESS_KEY = st.secrets["AWS_SECRET_ACCESS_KEY"]
+AWS_REGION = "ap-south-1"
+S3_BUCKET = "velir-ai-pooja-images"
+TABLE_NAME = "velir-ai-pooja-queries"
 
-S3_BUCKET = "velir-ai-pooja-2026"
-DYNAMO_TABLE = "velir_queries"
+# AWS clients
+s3 = boto3.client("s3", region_name=AWS_REGION)
 
-# AWS Clients
-dynamodb = boto3.resource(
-    "dynamodb",
-    region_name=AWS_REGION,
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-)
-
-s3 = boto3.client(
-    "s3",
-    region_name=AWS_REGION,
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-)
+dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+table = dynamodb.Table(TABLE_NAME)
 
 bedrock = boto3.client(
     "bedrock-runtime",
-    region_name=AWS_REGION,
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+    region_name=AWS_REGION
 )
 
-table = dynamodb.Table(DYNAMO_TABLE)
+# -----------------------------
+# STREAMLIT UI
+# -----------------------------
 
-# ---------------------------
-# STREAMLIT PAGE CONFIG
-# ---------------------------
+st.title("🌾 Velir AI - Smart Farming Assistant")
 
-st.set_page_config(
-    page_title="Velir AI",
-    page_icon="🌾",
-    layout="wide"
+st.write("Upload crop image or ask farming questions")
+
+# -----------------------------
+# IMAGE UPLOAD SECTION
+# -----------------------------
+
+st.header("📸 Crop Disease Detection")
+
+uploaded_file = st.file_uploader(
+    "Upload crop leaf image",
+    type=["jpg", "jpeg", "png"]
 )
 
-# ---------------------------
-# SIDEBAR - MARKET PRICES
-# ---------------------------
+if uploaded_file:
 
-st.sidebar.title("🌾 Market Prices")
+    image = Image.open(uploaded_file)
 
-prices = {
-    "Rice (1kg)": "₹55",
-    "Wheat (1kg)": "₹40",
-    "Tomato (1kg)": "₹30",
-    "Onion (1kg)": "₹35",
-    "Potato (1kg)": "₹28",
-    "Maize (1kg)": "₹22"
-}
+    st.image(image, caption="Uploaded Crop Image", use_container_width=True)
 
-for item, price in prices.items():
-    st.sidebar.metric(item, price)
+    file_name = str(uuid.uuid4()) + "_" + uploaded_file.name
 
-st.sidebar.info("Prices are indicative sample data.")
+    # Upload to S3
+    s3.upload_fileobj(
+        uploaded_file,
+        S3_BUCKET,
+        file_name
+    )
 
-# ---------------------------
-# MAIN HEADER
-# ---------------------------
+    st.success("Image uploaded to S3")
 
-st.title("🌾 Velir AI")
-st.subheader("Digital Farmer Officer")
+    # Ask Bedrock
+    prompt = """
+    A farmer uploaded an image of a crop leaf.
 
-col1, col2 = st.columns(2)
+    Predict possible crop disease.
 
-with col1:
-    st.markdown("### 🎙️ Vani – Policy Assistant")
-    st.write("Ask about crop insurance, weather and farming guidance.")
+    Provide:
+    1. Disease name
+    2. Cause
+    3. Treatment
+    4. Prevention
 
-with col2:
-    st.markdown("### 👁️ Kisan Vision – Crop Analyzer")
-    st.write("Upload crop images to store and analyze farm conditions.")
-
-st.divider()
-
-# ---------------------------
-# QUERY INPUT
-# ---------------------------
-
-st.header("Ask Farming Question")
-
-query = st.text_input(
-    "Enter your question",
-    placeholder="Example: How is my crop condition?"
-)
-
-def ask_bedrock(prompt):
+    Explain simply for farmers.
+    """
 
     body = json.dumps({
         "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
-        "max_tokens_to_sample": 200,
+        "max_tokens_to_sample": 300,
         "temperature": 0.5
     })
 
@@ -113,67 +87,55 @@ def ask_bedrock(prompt):
     )
 
     result = json.loads(response["body"].read())
-    return result["completion"]
 
-if st.button("Submit Query"):
+    diagnosis = result["completion"]
 
-    if query == "":
-        st.warning("Please enter a question")
+    st.subheader("🌿 AI Diagnosis")
 
-    else:
+    st.write(diagnosis)
 
-        with st.spinner("🤖 AI analyzing your query..."):
+# -----------------------------
+# FARMER QUESTION SECTION
+# -----------------------------
 
-            try:
-                response = ask_bedrock(query)
-            except:
-                response = "AI service temporarily unavailable."
+st.header("💬 Ask Farming Question")
 
-        st.success(response)
+question = st.text_input("Enter your question")
 
-        # Save query to DynamoDB
-        table.put_item(
-            Item={
-                "query_id": str(datetime.datetime.now()),
-                "query": query,
-                "response": response,
-                "timestamp": str(datetime.datetime.now())
-            }
+if st.button("Ask AI"):
+
+    if question != "":
+
+        prompt = f"""
+        You are an agricultural expert.
+
+        Answer the farmer question clearly.
+
+        Question: {question}
+        """
+
+        body = json.dumps({
+            "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
+            "max_tokens_to_sample": 200,
+            "temperature": 0.5
+        })
+
+        response = bedrock.invoke_model(
+            modelId="anthropic.claude-v2",
+            body=body
         )
 
-        st.info("Query stored in database")
+        result = json.loads(response["body"].read())
 
-st.divider()
+        answer = result["completion"]
 
-# ---------------------------
-# IMAGE UPLOAD
-# ---------------------------
+        st.success(answer)
 
-st.header("Upload Crop Image")
-
-uploaded_file = st.file_uploader(
-    "Upload crop photo",
-    type=["jpg","jpeg","png"]
-)
-
-if uploaded_file:
-
-    image = Image.open(uploaded_file)
-
-    st.image(image, caption="Uploaded Crop Image", use_container_width=True)
-
-    file_name = uploaded_file.name
-
-    s3.upload_fileobj(
-        uploaded_file,
-        S3_BUCKET,
-        file_name
-    )
-
-    st.success("Image uploaded to S3 successfully")
-
-    st.info("Future version will analyze crop disease using AI.")
-
-st.divider()
-
-st.caption("Velir AI – AI for Bharat Hackathon Prototype")
+        # Save to DynamoDB
+        table.put_item(
+            Item={
+                "query_id": str(uuid.uuid4()),
+                "question": question,
+                "answer": answer
+            }
+        )
